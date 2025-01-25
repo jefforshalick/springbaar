@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Springbaar</title>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            padding-top: 64px; /* Add padding to account for fixed header */
+        }
+        .sticky-header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 1000;
+            background-color: #242424;
+            border-bottom: 1px solid #2b2b2b;
+        }
+        .article-card {
+            background-color: #242424;
+            border: 1px solid #2b2b2b;
+            border-radius: 0;
+            height: 500px;
+            display: flex;
+            flex-direction: column;
+        }
+        .article-card:hover {
+            background-color: #2b2b2b;
+        }
+        .article-card:hover img {
+            filter: brightness(1.1);
+        }
+        .article-image-container {
+            position: relative;
+            height: 250px;
+            flex-shrink: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+        }
+        .article-image-container img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: all 0.2s ease;
+        }
+        .image-debug {
+            display: none;
+            font-size: 10px;
+            color: #fff;
+        }
+        .source-tag {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+        .loading-spinner {
+            display: none;
+            width: 50px;
+            height: 50px;
+            margin: 20px auto;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <header class="sticky-header">
+        <div class="container mx-auto px-4 py-3">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-8">
+                    <a href="/" class="text-xl font-semibold text-gray-100">Springbaar</a>
+                    <nav class="hidden md:flex space-x-4">
+                        <a href="/" class="text-gray-100 text-sm transition-colors">News</a>
+                        <a href="/shop" class="text-gray-400 hover:text-gray-100 text-sm transition-colors">Shop</a>
+                        <a href="/archive" class="text-gray-400 hover:text-gray-100 text-sm transition-colors">Archive</a>
+                    </nav>
+                </div>
+                <form action="/search" method="get" class="w-72">
+                    <input 
+                        type="text" 
+                        name="q" 
+                        placeholder="Search articles" 
+                        class="w-full px-4 py-2 bg-[#2b2b2b] border border-[#404040] text-gray-100 text-sm focus:outline-none focus:border-[#505050] placeholder-gray-400 transition-colors"
+                    >
+                </form>
+            </div>
+        </div>
+    </header>
+    
+    <main class="container mx-auto px-4 py-8">
+        {% if search %}
+            <h1 class="text-2xl font-semibold mb-6">Search results for "{{ search }}"</h1>
+        {% elif source %}
+            <h1 class="text-2xl font-semibold mb-6">Articles from {{ source }}</h1>
+        {% elif tag %}
+            <h1 class="text-2xl font-semibold mb-6">Articles tagged with "{{ tag }}"</h1>
+        {% endif %}
+        
+        <div id="articles" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {% for entry in entries %}
+                <a href="{{ entry.link }}" target="_blank" rel="noopener" class="article-card">
+                {% if entry.image_url %}
+                <div class="article-image-container">
+                    <img 
+                        src="/proxy/image?url={{ entry.image_url | urlencode }}"
+                        alt="{{ entry.title }}"
+                        loading="lazy"
+                        onerror="this.style.display='none'; this.parentElement.style.height='0px';"
+                    />
+                    <div class="source-tag">
+                        <span>{% if entry.source == 'ABTW' %}aBlogtoWatch{% else %}{{ entry.source }}{% endif %}</span>
+                    </div>
+                </div>
+                {% endif %}
+                    <div class="p-6 flex-grow">
+                        <div>
+                            <h2 class="text-xl font-semibold text-gray-300 mb-2">{{ entry.title }}</h2>
+                            <time class="text-sm text-gray-500 block mb-3">{{ entry.published_date }}</time>
+                            <p class="text-gray-400 text-sm line-clamp-3">{{ entry.summary }}</p>
+                        </div>
+                    </div>
+                </a>
+            {% endfor %}
+        </div>
+        <div id="sentinel" class="h-4"></div>
+        <div id="loading" class="loading-spinner"></div>
+    </main>
+
+    <script>
+        let currentPage = 1;
+        let loading = false;
+        let hasMore = true;
+        
+        // Create article card element
+        function createArticleCard(article) {
+            const card = document.createElement('a');
+            card.href = article.link;
+            card.target = '_blank';
+            card.rel = 'noopener';
+            card.className = 'article-card';
+            
+            let imageHtml = '';
+            if (article.image_url) {
+                imageHtml = `
+                    <div class="article-image-container">
+                        <img 
+                            src="/proxy/image?url=${encodeURIComponent(article.image_url)}"
+                            alt="${article.title}"
+                            loading="lazy"
+                            onerror="this.style.display='none'; this.parentElement.style.height='0px';"
+                        />
+                        <div class="source-tag">
+                            <span>${article.source === 'ABTW' ? 'aBlogtoWatch' : article.source}</span>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            const date = new Date(article.published);
+            const formattedDate = article.published_date;
+            
+            card.innerHTML = `
+                ${imageHtml}
+                <div class="p-6 flex-grow">
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-300 mb-2">${article.title}</h2>
+                        <time class="text-sm text-gray-500 block mb-3">${formattedDate}</time>
+                        <p class="text-gray-400 text-sm line-clamp-3">${article.summary}</p>
+                    </div>
+                </div>
+            `;
+            
+            return card;
+        }
+        
+        // Load more articles
+        async function loadMoreArticles() {
+            if (loading || !hasMore) return;
+            
+            loading = true;
+            document.getElementById('loading').style.display = 'block';
+            
+            try {
+                const params = new URLSearchParams({
+                    page: currentPage + 1
+                });
+                
+                const searchParam = '{{ search|default("", true) }}';
+                const sourceParam = '{{ source|default("", true) }}';
+                const tagParam = '{{ tag|default("", true) }}';
+                
+                if (searchParam) params.append('search', searchParam);
+                if (sourceParam) params.append('source', sourceParam);
+                if (tagParam) params.append('tag', tagParam);
+                
+                const response = await fetch(`/api/articles?${params.toString()}`);
+                const data = await response.json();
+                
+                const articlesContainer = document.getElementById('articles');
+                data.articles.forEach(article => {
+                    const card = createArticleCard(article);
+                    articlesContainer.appendChild(card);
+                });
+                
+                currentPage = data.page;
+                hasMore = data.has_more;
+                
+            } catch (error) {
+                console.error('Error loading more articles:', error);
+            } finally {
+                loading = false;
+                document.getElementById('loading').style.display = 'none';
+            }
+        }
+        
+        // Set up Intersection Observer
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && !loading) {
+                    loadMoreArticles();
+                }
+            });
+        }, {
+            rootMargin: '100px'
+        });
+        
+        // Start observing the sentinel element
+        observer.observe(document.getElementById('sentinel'));
+    </script>
+</body>
+</html> 

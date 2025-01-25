@@ -1,0 +1,55 @@
+{% extends "index.html" %}
+
+{% block search_value %}{{ query }}{% endblock %}
+
+{% block content %}
+<main class="container mx-auto px-0 py-8">
+    <div class="mb-8">
+        <h2 class="text-xl text-gray-100 mb-2">Search Results for "{{ query }}"</h2>
+        <p class="text-gray-500">{{ count }} articles found</p>
+    </div>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {% for entry in results %}
+        <a href="{{ entry.link }}" target="_blank" class="block">
+            <article class="article-card overflow-hidden">
+                {% if entry.image_url %}
+                <div class="article-image-container w-full h-56">
+                    <img 
+                        src="/proxy/image?url={{ entry.image_url | urlencode }}" 
+                        alt="{{ entry.title }}" 
+                        class="w-full h-full object-cover"
+                        onerror="handleImageError(this)"
+                        onload="handleImageLoad(this)"
+                        loading="lazy"
+                    >
+                    <div class="image-debug absolute bottom-0 left-0 right-0 bg-black/80 p-1">
+                        URL: {{ entry.image_url }}
+                        <br>
+                        <span class="load-status"></span>
+                    </div>
+                </div>
+                {% endif %}
+                <div class="p-6">
+                    <div class="flex items-center justify-between mb-3">
+                        <span class="bg-[#2b2b2b] text-gray-500 text-sm font-medium px-2 py-1">{{ entry.source }}</span>
+                        <time class="text-sm text-gray-500">{{ entry.published.strftime('%b %d, %Y') }}</time>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-semibold text-gray-300 mb-3">{{ entry.title }}</h2>
+                        <p class="text-gray-400 text-sm line-clamp-3">{{ entry.summary }}</p>
+                    </div>
+                </div>
+            </article>
+        </a>
+        {% endfor %}
+    </div>
+    
+    {% if not results %}
+    <div class="text-center py-16">
+        <p class="text-gray-400">No articles found matching your search.</p>
+        <a href="/" class="inline-block mt-4 text-gray-500 hover:text-gray-300">Return to Home</a>
+    </div>
+    {% endif %}
+</main>
+{% endblock %} 
